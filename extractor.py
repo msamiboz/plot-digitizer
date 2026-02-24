@@ -1,10 +1,12 @@
+import math
 import numpy as np
 from scipy import ndimage
 from scipy.signal import savgol_filter
 from datetime import datetime
 
 
-def extract_median(img_array, target_color, tolerance, y_min, y_max):
+def extract_median(img_array, target_color, tolerance, y_min, y_max,
+                   apply_smooth=False):
     """
     Extract the median path of a colored region in a chart image.
 
@@ -16,17 +18,16 @@ def extract_median(img_array, target_color, tolerance, y_min, y_max):
         RGB color to match.
     tolerance : int
         Per-channel tolerance for color matching.
-    y_min : int
-        Upper pixel row bound (inclusive) for the extraction region.
-    y_max : int
-        Lower pixel row bound (inclusive) for the extraction region.
+    y_min, y_max : int
+        Upper/lower pixel row bounds (inclusive).
+    apply_smooth : bool
+        If True, apply additional moving-average smoothing after the
+        baseline Savitzky-Golay filter to reduce spikes/volatility.
 
     Returns
     -------
     unique_x : np.ndarray
-        Sorted array of x pixel coordinates where the color was found.
     smoothed_y : np.ndarray
-        Smoothed median y pixel coordinate for each x.
     """
     target = np.array(target_color, dtype=np.int16)
     lower = np.clip(target - tolerance, 0, 255).astype(np.uint8)
@@ -43,7 +44,6 @@ def extract_median(img_array, target_color, tolerance, y_min, y_max):
     if len(x_coords) == 0:
         return np.array([]), np.array([])
 
-    # Offset y back to full-image coordinates
     y_coords = y_coords + y_min
 
     unique_x = np.unique(x_coords)
@@ -60,38 +60,53 @@ def extract_median(img_array, target_color, tolerance, y_min, y_max):
     else:
         smoothed_y = median_y
 
+    if apply_smooth and len(smoothed_y) >= 5:
+        k = max(5, len(smoothed_y) // 15)
+        if k % 2 == 0:
+            k += 1
+        kernel = np.ones(k) / k
+        padded = np.pad(smoothed_y, k // 2, mode="edge")
+        smoothed_y = np.convolve(padded, kernel, mode="valid")[:len(unique_x)]
+
     return unique_x, smoothed_y
 
 
-def build_calibration(y_calib, x_calib):
+def build_calibration(y_calib, x_calib, y_scale="linear"):
     """
-    Build linear mapping functions from two calibration point pairs.
+    Build mapping functions from two calibration point pairs.
 
     Parameters
     ----------
     y_calib : ((px1, val1), (px2, val2))
-        Two (pixel_y, real_value) pairs.
     x_calib : ((px1, date_str1), (px2, date_str2))
-        Two (pixel_x, date_string) pairs. Dates as 'YYYY-MM' or 'YYYY-MM-DD'.
+    y_scale : str
+        'linear' or 'log'.  Log maps pixel space through log10.
 
     Returns
     -------
-    y_func : callable
-        Maps pixel y -> real value.
-    x_func : callable
-        Maps pixel x -> datetime.
+    y_func : callable   pixel_y -> real value
+    x_func : callable   pixel_x -> datetime
     """
     (py1, v1), (py2, v2) = y_calib
-    y_slope = (v2 - v1) / (py2 - py1) if py2 != py1 else 0
 
-    def y_func(py):
-        return v1 + y_slope * (py - py1)
+    if y_scale == "log":
+        if v1 <= 0 or v2 <= 0:
+            raise ValueError("Log Y-axis requires positive reference values.")
+        lv1, lv2 = math.log10(v1), math.log10(v2)
+        slope = (lv2 - lv1) / (py2 - py1) if py2 != py1 else 0
+
+        def y_func(py):
+            return 10 ** (lv1 + slope * (py - py1))
+    else:
+        slope = (v2 - v1) / (py2 - py1) if py2 != py1 else 0
+
+        def y_func(py):
+            return v1 + slope * (py - py1)
 
     (px1, d1_str), (px2, d2_str) = x_calib
     d1 = _parse_date(d1_str)
     d2 = _parse_date(d2_str)
-    d1_ord = d1.toordinal()
-    d2_ord = d2.toordinal()
+    d1_ord, d2_ord = d1.toordinal(), d2.toordinal()
     x_slope = (d2_ord - d1_ord) / (px2 - px1) if px2 != px1 else 0
 
     def x_func(px):
@@ -102,14 +117,7 @@ def build_calibration(y_calib, x_calib):
 
 
 def pixel_to_series(unique_x, median_y, y_func, x_func):
-    """
-    Convert pixel-space median path to (date, value) series.
-
-    Returns
-    -------
-    dates : list[datetime]
-    values : list[float]
-    """
+    """Convert pixel-space median path to (date, value) series."""
     dates = [x_func(px) for px in unique_x]
     values = [round(y_func(py), 4) for py in median_y]
     return dates, values

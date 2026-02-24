@@ -1,19 +1,23 @@
-# Plot Digitizer
+# Plot Digitizer v1.0.0
 
-A desktop GUI tool for extracting time-series data from chart images. Point-and-click to calibrate axes, select a colored region, and the app computes the median path — converting pixels into real-world dates and values exported as CSV.
+A desktop GUI tool for extracting time-series data from chart images. Point-and-click to pick a color, calibrate axes, and the app computes the median path — converting pixels into real-world dates and values exported as CSV.
 
 Built with Python, Tkinter, and matplotlib. Runs locally on macOS, Linux, and Windows.
 
 ## Features
 
-- **Interactive axis calibration** — click two Y-axis and two X-axis reference points, enter their known values/dates, and the app builds a linear pixel-to-real mapping.
-- **Color-based region detection** — click anywhere on the chart region you want to extract (e.g., a shaded forecast band). The app matches that color across the image using configurable tolerance.
-- **Vertical bounds** — set upper and lower pixel limits to exclude legends, titles, or other chart elements that share the target color.
-- **Median extraction** — computes the median y-coordinate of matched pixels at each x-column, fills holes, and smooths the result with a Savitzky-Golay filter.
-- **Live zoom panel** — a magnified view (~4x) tracks your cursor in real time, showing pixel-level detail so you can precisely click on axis gridlines and tick marks.
-- **Batch processing** — loads all `.png` images from a folder, processes them one by one, with Skip and Reset controls.
-- **Undo support** — undo the last click at any calibration step before confirming.
-- **CSV output** — each image produces a `date,value` CSV file saved to the `output/` directory.
+- **Start page** — configure input/output folders, Y-axis scale, smoothing, and marker colors before launching.
+- **Color-based region detection** — click anywhere on the chart to pick the target color. Configurable tolerance.
+- **Optional vertical bounds** — constrain extraction to a sub-region, or skip to use the full image.
+- **Interactive axis calibration** — click Y1/Y2 and X1/X2 reference points with repeating cycle (Y1→Y2→Y1→Y2…) so you can refine freely before confirming.
+- **Run Extraction anytime** — available as soon as a color is picked; re-run whenever you adjust settings.
+- **Smooth extraction** — optional moving-average post-processing to reduce spikes and volatility.
+- **Linear or log Y-axis** — choose before starting; the calibration math adapts automatically.
+- **Colorblind-friendly palette** — one-click preset, or pick custom colors for every marker, bound line, and crosshair.
+- **Live zoom panel** — magnified view tracks your cursor with configurable crosshair color.
+- **Global undo** — undo the last click at any step, including mid-cycle replacements.
+- **Batch processing** — loads all image files from the input folder and processes them one by one.
+- **CSV output** — each image produces a `date,value` CSV file in the output folder.
 
 ## Requirements
 
@@ -31,55 +35,46 @@ pip install -r requirements.txt
 ## Usage
 
 ```bash
-# Default: loads .png images from ../pictures/ relative to app.py
-python app.py
-
-# Custom image folder
-python app.py /path/to/your/chart/images/
+python app.py                                # launch start page
+python app.py /path/to/images/               # pre-fill input folder
+python app.py /path/to/images/ /path/to/out/ # pre-fill both folders
 ```
 
 ## Workflow
 
-The app guides you through 5 steps for each image:
+The start page lets you configure folders and settings, then launches the digitizer.
+
+For each image the app guides you through 5 steps:
 
 | Step | Action | What to do |
 |------|--------|------------|
-| 1 | **Y-axis calibration** | Click two points on known Y-axis gridlines. Enter their numeric values (e.g., `0` and `10`) in the Y1/Y2 fields. Click **Confirm Step**. |
-| 2 | **X-axis calibration** | Click two points on known X-axis tick marks. Enter their dates (e.g., `2005-03` and `2007-02`) in the X1/X2 fields. Click **Confirm Step**. |
-| 3 | **Color pick** | Click on the colored region you want to extract. A color swatch updates in the zoom panel. Adjust **Tolerance** if needed (default: 15). Click **Confirm Step**. |
-| 4 | **Vertical bounds** | Click an upper and lower boundary to limit the extraction area. Click **Confirm Step** to run extraction. |
-| 5 | **Review & save** | A red median line is overlaid on the image. If it looks correct, click **Save & Next**. Otherwise, adjust tolerance and click **Run Extraction** again, or **Reset Image** to start over. |
+| 1 | **Pick color** | Click on the colored region to extract. Run Extraction becomes available. |
+| 2 | **Set bounds** | Click upper and lower boundaries (optional — Confirm to skip and use full image). |
+| 3 | **Y-axis calibration** | Click Y1 and Y2 reference points (cycle repeats). Enter their numeric values. |
+| 4 | **X-axis calibration** | Click X1 and X2 reference points (cycle repeats). Enter their dates. |
+| 5 | **Review & save** | A red median line overlays the image. Save & Next or adjust. |
 
 ## Controls
 
 | Button | Description |
 |--------|-------------|
 | **Undo Last Click** | Remove the most recent click in the current step |
-| **Confirm Step** | Lock in the current step and advance to the next |
-| **Run Extraction** | Run (or re-run) the median extraction with current settings |
-| **Save & Next** | Save CSV to `output/` and load the next image |
+| **Confirm Step** | Lock in the current step and advance |
+| **Run Extraction** | Run (or re-run) extraction with current color, bounds, and tolerance |
+| **Save & Next** | Save CSV and load the next image |
 | **Skip** | Skip the current image without saving |
 | **Reset Image** | Restart all steps for the current image |
+| **Back to Start** | Return to the start page |
 
-## Zoom Panel
+## Start Page Settings
 
-The right-side panel shows a magnified view centered on your cursor. It displays:
-- Pixel coordinates (`x`, `y`)
-- RGB values at the cursor position
-- A color swatch of the picked color (after Step 3)
-
-Use this to precisely align clicks with axis gridlines.
+| Setting | Options | Default |
+|---------|---------|---------|
+| **Y-axis scale** | Linear / Log | Linear |
+| **Smooth extraction** | On / Off | Off |
+| **Marker colors** | Default / Colorblind-friendly / Custom per marker | Default |
 
 ## Output
-
-Each processed image produces a CSV in the `output/` directory:
-
-```
-output/
-  Inf_report_06_1.csv
-  Inf_report_06_2.csv
-  ...
-```
 
 CSV format:
 
@@ -88,14 +83,13 @@ date,value
 2005-03-01,8.0
 2005-04-02,7.8
 ...
-2007-02-01,4.5
 ```
 
 ## Project Structure
 
 ```
 plot_digitizer/
-  app.py             # Main GUI application
+  app.py             # Main GUI (start page + digitizer)
   extractor.py       # Median extraction and calibration logic
   requirements.txt   # Python dependencies
   output/            # Generated CSV files (git-ignored)
