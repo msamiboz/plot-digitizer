@@ -1,0 +1,5 @@
+# In the plot_digitizer directory, create .gitignore with:
+output/*.csv
+__pycache__/
+*.pyc
+.DS_Store
